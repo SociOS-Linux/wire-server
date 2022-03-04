@@ -30,6 +30,7 @@ library
       Wire.API.Conversation.Typing
       Wire.API.Cookie
       Wire.API.CustomBackend
+      Wire.API.Error
       Wire.API.ErrorDescription
       Wire.API.Event.Conversation
       Wire.API.Event.FeatureConfig

@@ -52,12 +52,7 @@ instance
   toSwagger _ = errorDescriptionAddToSwagger @code @label @desc (toSwagger (Proxy @api))
 
 -- CanThrow annotations are ignored by servant
-instance
-  ( HasContextEntry (ctx .++ DefaultErrorFormatters) ErrorFormatters,
-    HasServer api ctx
-  ) =>
-  HasServer (CanThrow t :> api) ctx
-  where
+instance (HasServer api ctx) => HasServer (CanThrow t :> api) ctx where
   type ServerT (CanThrow t :> api) m = ServerT api m
 
   route _ = route (Proxy @api)
