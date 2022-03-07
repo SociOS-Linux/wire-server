@@ -79,6 +79,7 @@ import Control.Lens (over, view, (?~), (^.))
 import Data.Aeson (FromJSON (..), ToJSON (..))
 import qualified Data.Aeson as A
 import Data.Bifunctor (second)
+import qualified Data.Code as Code
 import Data.Coerce
 import Data.Domain (Domain)
 import qualified Data.HashMap.Strict as HashMap
@@ -593,7 +594,8 @@ data NewClient = NewClient
     newClientCookie :: Maybe CookieLabel,
     newClientPassword :: Maybe PlainTextPassword,
     newClientModel :: Maybe Text,
-    newClientCapabilities :: Maybe (Set ClientCapability)
+    newClientCapabilities :: Maybe (Set ClientCapability),
+    newClientVerificationCode :: Maybe Code.Value
   }
   deriving stock (Eq, Show, Generic)
   deriving (Arbitrary) via (GenericUniform NewClient)
@@ -695,6 +697,7 @@ instance ToSchema NewClient where
             )
         <*> newClientModel .= maybe_ (optField "model" schema)
         <*> newClientCapabilities .= maybe_ capabilitiesFieldSchema
+        <*> newClientVerificationCode .= maybe_ (optField "verification_code" schema)
 
 newClient :: ClientType -> LastPrekey -> NewClient
 newClient t k =
@@ -707,7 +710,8 @@ newClient t k =
       newClientCookie = Nothing,
       newClientPassword = Nothing,
       newClientModel = Nothing,
-      newClientCapabilities = Nothing
+      newClientCapabilities = Nothing,
+      newClientVerificationCode = Nothing
     }
 
 --------------------------------------------------------------------------------
