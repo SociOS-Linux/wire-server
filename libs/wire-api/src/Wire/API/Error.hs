@@ -16,7 +16,6 @@
 --
 -- You should have received a copy of the GNU Affero General Public License along
 -- with this program. If not, see <https://www.gnu.org/licenses/>.
-
 module Wire.API.Error where
 
 import Control.Lens (at, (%~), (.~), (?~))
@@ -28,12 +27,15 @@ import qualified Data.Text as Text
 import GHC.TypeLits
 import Imports
 import Numeric.Natural
+import Polysemy
+import Polysemy.Error
+import Polysemy.Internal
 import Servant
 import Servant.Swagger
 import Wire.API.Routes.MultiVerb
 
 -- | Runtime representation of a statically-known error.
-data Error = Error
+data DynError = DynError
   { eCode :: Natural,
     eLabel :: Text,
     eMessage :: Text
@@ -63,23 +65,23 @@ class KnownError (e :: StaticError) where
 instance (KnownNat c, KnownSymbol l, KnownSymbol msg) => KnownError ('StaticError c l msg) where
   seSing = SStaticError Proxy Proxy Proxy
 
-seError' :: SStaticError e -> Error
-seError' (SStaticError c l msg) = mkError c l msg
+dynError' :: SStaticError e -> DynError
+dynError' (SStaticError c l msg) = mkDynError c l msg
 
-mkError ::
+mkDynError ::
   (KnownNat c, KnownSymbol l, KnownSymbol msg) =>
   Proxy c ->
   Proxy l ->
   Proxy msg ->
-  Error
-mkError c l msg =
-  Error
+  DynError
+mkDynError c l msg =
+  DynError
     (toEnum (fromIntegral (natVal c)))
     (Text.pack (symbolVal l))
     (Text.pack (symbolVal msg))
 
-seError :: forall e. KnownError e => Error
-seError = seError' $ seSing @e
+dynError :: forall e. KnownError e => DynError
+dynError = dynError' $ seSing @e
 
 staticErrorSchema :: SStaticError e -> ValueSchema NamedSwaggerDoc (SStaticError e)
 staticErrorSchema e@(SStaticError c l m) =
@@ -89,7 +91,7 @@ staticErrorSchema e@(SStaticError c l m) =
       <*> (l <$ (const label .= field "label" labelSchema))
       <*> (m <$ (const message .= field "message" schema))
   where
-    err = seError' e
+    err = dynError' e
     label = eLabel err
     code = eCode err
     message = eMessage err
@@ -122,7 +124,7 @@ addToSwagger =
   S.allOperations . S.responses . S.responses . at (fromIntegral (eCode err))
     %~ Just . addRef
   where
-    err = seError @e
+    err = dynError @e
 
     addRef :: Maybe (S.Referenced S.Response) -> S.Referenced S.Response
     addRef Nothing = S.Inline resp
@@ -136,15 +138,28 @@ addToSwagger =
 
     desc = eMessage err <> " (label: `" <> eLabel err <> "`)"
 
+class IsError e where
+  type MapError (x :: e) :: StaticError
+
+data ErrorS e m a where
+  ThrowS :: Proxy e -> ErrorS e m a
+
+throwS :: forall e r a. Member (ErrorS e) r => Sem r a
+throwS = send (ThrowS (Proxy @e))
+
+runErrorS ::
+  forall e r a.
+  (Member (Error DynError) r, KnownError (MapError e)) =>
+  Sem (ErrorS e ': r) a ->
+  Sem r a
+runErrorS = interpret $ \case ThrowS _ -> throw (dynError @(MapError e))
+
 --------------------------------------------------------------------------------
 -- Example
 
 data GalleyError
   = InvalidAction
   | InvalidTargetAccess
-
-class IsError k where
-  type MapError (e :: k) :: StaticError
 
 instance IsError GalleyError where
   type MapError 'InvalidAction = 'StaticError 400 "invalid-action" "Invalid action"
