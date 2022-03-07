@@ -14,6 +14,7 @@
 --
 -- You should have received a copy of the GNU Affero General Public License along
 -- with this program. If not, see <https://www.gnu.org/licenses/>.
+{-# OPTIONS_GHC -Wwarn #-}
 
 module Galley.API.Update
   ( -- * Managing Conversations
@@ -1171,20 +1172,21 @@ unqualifyEndpoint loc f ignoreMissing reportMissing message = do
   unqualify (tDomain loc) <$> f qualifiedMessage
 
 postBotMessageUnqualified ::
-  ( r
-      ~ '[ BrigAccess,
-           ClientStore,
-           ConversationStore,
-           ExternalAccess,
-           FederatorAccess,
-           GundeckAccess,
-           Input (Local ()),
-           Input Opts,
-           Input UTCTime,
-           MemberStore,
-           TeamStore,
-           TinyLog
-         ]
+  ( Members
+      '[ -- BrigAccess,
+         -- ClientStore,
+         -- ConversationStore,
+         -- ExternalAccess,
+         -- FederatorAccess,
+         -- GundeckAccess,
+         -- Input (Local ()),
+         -- Input Opts,
+         -- MemberStore,
+         -- TeamStore,
+         -- TinyLog,
+         Input UTCTime
+       ]
+      r
   ) =>
   BotId ->
   ConvId ->
@@ -1193,14 +1195,16 @@ postBotMessageUnqualified ::
   NewOtrMessage ->
   Sem r (PostOtrResponse ClientMismatch)
 postBotMessageUnqualified sender cnv ignoreMissing reportMissing message = do
-  lusr <- qualifyLocal (botUserId sender)
-  lcnv <- qualifyLocal cnv
-  unqualifyEndpoint
-    lusr
-    (runLocalInput lusr . postQualifiedOtrMessage Bot (qUntagged lusr) Nothing lcnv)
-    ignoreMissing
-    reportMissing
-    message
+  undefined
+
+-- lusr <- qualifyLocal (botUserId sender)
+-- lcnv <- qualifyLocal cnv
+-- unqualifyEndpoint
+--   lusr
+--   (runLocalInput lusr . postQualifiedOtrMessage Bot (qUntagged lusr) Nothing lcnv)
+--   ignoreMissing
+--   reportMissing
+--   message
 
 postOtrBroadcastUnqualified ::
   Members

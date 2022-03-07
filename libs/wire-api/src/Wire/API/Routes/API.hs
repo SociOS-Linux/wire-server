@@ -17,71 +17,41 @@
 
 module Wire.API.Routes.API
   ( API (..),
-    toAPI,
     namedAPI,
     (<@>),
+    ServerEffect (..),
+    ServerEffects (..),
+    hoistServerWithDomain,
   )
 where
 
 import Data.Domain
 import Data.Proxy
 import Data.Swagger
+import Data.Time
 import Imports
 import Polysemy
+import Polysemy.Error
+import Polysemy.Input
 import Polysemy.Internal
-import Polysemy.Internal.Sing
-import Polysemy.Internal.Union
 import Servant hiding (Union)
-import Servant.Swagger
-import Unsafe.Coerce
 import Wire.API.Error
 import Wire.API.Routes.Named
 
--- | A Servant handler bundled with its Swagger documentation.
---
--- This is used to build Swagger documentation incrementally using information
--- that is not contained in the 'api' types. For example, documentation on
--- errors can be generated using the list of polysemy effects in the type of
--- the handler.
-data API api = API
-  { apiHandler :: ServerT api Handler,
-    apiSwagger :: Swagger
-  }
+-- | A Servant handler on a polysemy stack. This is used to help with type inference.
+newtype API api r = API {apiHandler :: ServerT api (Sem r)}
 
--- | Convert a polysemy handler to an 'API' value.
-toAPI ::
-  forall api r.
-  ( ServerEffects r,
-    ErrorSwagger r,
-    HasSwagger api,
-    HasServer api '[Domain]
-  ) =>
-  ServerT api (Sem r) ->
-  API api
-toAPI h =
-  API
-    (hoistServerWithDomain @api (toHandler @r) h)
-    (errorSwagger @r (toSwagger (Proxy @api)))
-
+-- | Convert a polysemy handler to a named 'API' value.
 namedAPI ::
-  forall name api r.
-  ( ServerEffects r,
-    ErrorSwagger r,
-    HasSwagger api,
-    HasServer api '[Domain]
-  ) =>
-  ServerT api (Sem r) ->
-  API (Named name api)
-namedAPI h =
-  let api = toAPI @api @r h
-   in api {apiHandler = Named (apiHandler api)}
+  forall r0 name api.
+  (HasServer api '[Domain], ServerEffects (DeclaredErrorEffects api) r0) =>
+  ServerT api (Sem (Append (DeclaredErrorEffects api) r0)) ->
+  API (Named name api) r0
+namedAPI h = API $ Named @name (hoistServerWithDomain @api (interpretServerEffects @(DeclaredErrorEffects api) @r0) h)
 
 -- | Combine APIs.
-(<@>) :: API api1 -> API api2 -> API (api1 :<|> api2)
-(<@>) (API h1 s1) (API h2 s2) =
-  API
-    (h1 :<|> h2)
-    (s1 <> s2)
+(<@>) :: API api1 r -> API api2 r -> API (api1 :<|> api2) r
+(<@>) (API h1) (API h2) = API (h1 :<|> h2)
 
 class ErrorSwagger (r :: EffectRow) where
   errorSwagger :: Swagger -> Swagger
@@ -109,49 +79,23 @@ hoistServerWithDomain ::
   ServerT api n
 hoistServerWithDomain = hoistServerWithContext (Proxy @api) (Proxy @'[Domain])
 
--- | Helper class to add effects at the end of a stack.
-class Shift r where
-  shiftUnion :: forall r0 m a. Proxy r0 -> Union r m a -> Union (Append r r0) m a
+class ServerEffect eff r where
+  interpretServerEffect :: Sem (eff ': r) a -> Sem r a
 
--- | Add any number of effects at the end of a stack.
-shift :: forall r r0 a. Shift r => Sem r a -> Sem (Append r r0) a
-shift = hoistSem $ hoist (shift @r @r0) . shiftUnion @r (Proxy @r0)
+class ServerEffects r r1 where
+  interpretServerEffects :: Sem (Append r r1) a -> Sem r1 a
 
-instance Shift '[] where
-  shiftUnion _ = absurdU
-
-instance Shift r => Shift (eff ': r) where
-  shiftUnion r0 = either (weaken . shiftUnion @r r0) injWeaving . decomp
-
--- | An effect that can be interpreted intto the Handler monad.
-class ServerEffect (eff :: Effect) where
-  interpretServerEffect :: Member (Embed Handler) r => Sem (eff ': r) a -> Sem r a
-
-class (Shift r, KnownList r) => ServerEffects (r :: [Effect]) where
-  interpretServerEffects :: Member (Embed Handler) r1 => Sem (Append r r1) a -> Sem r1 a
-
-instance ServerEffects '[] where
+instance ServerEffects '[] r where
   interpretServerEffects = id
 
--- | A function @c => x@, where @c@ is a constraint.
-newtype Constrained c x = Constrained (c => x)
-
--- | Convert dictionary to instance, CPS style. This uses 'unsafeCoerce' under
--- the hood to convert a constrained value @Member e r => x@ into a function
--- @ElemOf e r -> x@ taking the membership evidence explicitly as an argument.
-withMember :: forall e r x. ElemOf e r -> (Member e r => x) -> x
-withMember mem k = unsafeCoerce (Constrained @(Member e r) k) mem
-
-instance (ServerEffects r, ServerEffect eff) => ServerEffects (eff ': r) where
-  interpretServerEffects :: forall r1 a. Member (Embed Handler) r1 => Sem (Append (eff ': r) r1) a -> Sem r1 a
-  interpretServerEffects h =
-    withMember (extendMembershipLeft (singList @r) (membership @(Embed Handler) @r1)) $
-      interpretServerEffects @r @r1 $
-        interpretServerEffect @eff @(Append r r1) h
-
--- | Interpret all effects to 'Handler'.
-toHandler :: forall r a. ServerEffects r => Sem r a -> Handler a
-toHandler = runM . interpretServerEffects @r @'[Embed Handler] . shift @r @'[Embed Handler]
+instance (ServerEffects r r1, ServerEffect eff (Append r r1)) => ServerEffects (eff ': r) r1 where
+  interpretServerEffects = interpretServerEffects @r @r1 . interpretServerEffect @eff @(Append r r1)
 
 --------------------------------------------------------------------------------
 -- Instances
+
+instance Member (Embed IO) r => ServerEffect (Input UTCTime) r where
+  interpretServerEffect = runInputSem (embed getCurrentTime)
+
+instance (KnownError (MapError e), Member (Error DynError) r) => ServerEffect (ErrorS e) r where
+  interpretServerEffect = runErrorS

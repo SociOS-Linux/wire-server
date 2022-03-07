@@ -62,7 +62,6 @@ where
 import Data.Id
 import Data.Qualified
 import Data.Time.Clock
-import Galley.API.Error
 import Galley.Cassandra.Paging
 import Galley.Effects.BotAccess
 import Galley.Effects.BrigAccess
@@ -88,14 +87,12 @@ import Galley.Effects.TeamStore
 import Galley.Effects.WaiRoutes
 import Galley.Env
 import Galley.Options
-import qualified Network.Wai.Utilities as Wai
 import Polysemy
-import Polysemy.Error
 import Polysemy.Input
-import Polysemy.Internal
 import Polysemy.TinyLog
 
-type NonErrorGalleyEffects1 =
+-- All the possible high-level effects.
+type GalleyEffects1 =
   '[ BrigAccess,
      SparAccess,
      GundeckAccess,
@@ -127,9 +124,3 @@ type NonErrorGalleyEffects1 =
      Queue DeleteItem,
      TinyLog
    ]
-
--- All the possible high-level effects.
-type GalleyEffects1 =
-  Append
-    NonErrorGalleyEffects1
-    (Append AllErrorEffects '[Error Wai.Error])

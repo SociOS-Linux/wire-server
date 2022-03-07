@@ -223,8 +223,6 @@ evalGalley e action = do
     . embedToFinal @IO
     . runInputConst e
     . runInputConst (e ^. cstate)
-    . interpretErrorToException
-    . mapAllErrors
     . interpretTinyLog e
     . interpretQueue (e ^. deleteQueue)
     . runInputSem (embed getCurrentTime) -- FUTUREWORK: could we take the time only once instead?

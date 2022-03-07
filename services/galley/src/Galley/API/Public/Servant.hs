@@ -14,29 +14,40 @@
 --
 -- You should have received a copy of the GNU Affero General Public License along
 -- with this program. If not, see <https://www.gnu.org/licenses/>.
+{-# OPTIONS_GHC -Wwarn #-}
 
 module Galley.API.Public.Servant (servantSitemap) where
 
--- import Galley.API.Create
--- import Galley.API.Query
--- import Galley.API.Teams
--- import Galley.API.Teams.Features
+import Data.Domain
+import Data.Proxy
 import Galley.API.Update
 import Galley.App
--- import Galley.Cassandra.Paging
--- import Imports
+import Imports
 import Polysemy
--- import Servant.API
+import Polysemy.Internal
 import Servant.Server
--- import Wire.API.Team.Feature
-
+import Wire.API.Error
 import Wire.API.Routes.API
 import Wire.API.Routes.Named
 import Wire.API.Routes.Public.Galley
 
-servantSitemap :: API BotAPI
+galleyAPI ::
+  forall name api.
+  (HasServer api '[Domain], ServerEffects (DeclaredErrorEffects api) GalleyEffects) =>
+  ServerT api (Sem (Append (DeclaredErrorEffects api) GalleyEffects)) ->
+  API (Named name api) GalleyEffects
+galleyAPI = namedAPI
+
+-- toAPI ::
+--   forall api.
+--   (HasServer api '[Domain], ServerEffects (DeclaredErrorEffects api) GalleyEffects) =>
+--   ServerT api (Sem (Append (DeclaredErrorEffects api) GalleyEffects)) ->
+--   ServerT api (Sem GalleyEffects)
+-- toAPI h = hoistServerWithDomain @api (interpretServerEffects @(DeclaredErrorEffects api) @GalleyEffects) h
+
+servantSitemap :: ServerT BotAPI (Sem GalleyEffects)
 -- servantSitemap = conversations :<|> teamConversations :<|> messaging :<|> bot :<|> team :<|> features
-servantSitemap = bot
+servantSitemap = apiHandler $ bot
   where
     -- conversations =
     --   Named @"get-unqualified-conversation" getUnqualifiedConversation
@@ -88,8 +99,8 @@ servantSitemap = bot
     --     :<|> Named @"post-proteus-message" postProteusMessage
     --     :<|> Named @"post-proteus-broadcast" postProteusBroadcast
 
-    bot =
-      namedAPI @"post-bot-message-unqualified" postBotMessageUnqualified
+    bot :: API BotAPI GalleyEffects
+    bot = galleyAPI @"post-bot-message-unqualified" postBotMessageUnqualified
 
 -- team =
 --   Named @"create-non-binding-team" createNonBindingTeamH

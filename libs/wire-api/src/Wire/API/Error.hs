@@ -105,7 +105,7 @@ staticErrorSchema e@(SStaticError c l m) =
 instance KnownError e => ToSchema (SStaticError e) where
   schema = staticErrorSchema seSing
 
-data DeclareError e
+data DeclareError (e :: *)
 
 instance (HasServer api ctx) => HasServer (DeclareError t :> api) ctx where
   type ServerT (DeclareError t :> api) m = ServerT api m
@@ -114,10 +114,15 @@ instance (HasServer api ctx) => HasServer (DeclareError t :> api) ctx where
   hoistServerWithContext _ = hoistServerWithContext (Proxy @api)
 
 instance
-  (HasSwagger api, KnownError e) =>
+  (HasSwagger api, KnownError (MapError e)) =>
   HasSwagger (DeclareError e :> api)
   where
-  toSwagger _ = addToSwagger @e (toSwagger (Proxy @api))
+  toSwagger _ = addToSwagger @(MapError e) (toSwagger (Proxy @api))
+
+type family DeclaredErrorEffects api :: EffectRow where
+  DeclaredErrorEffects (DeclareError e :> api) = (ErrorS e ': DeclaredErrorEffects api)
+  DeclaredErrorEffects (x :> api) = DeclaredErrorEffects api
+  DeclaredErrorEffects api = '[]
 
 addToSwagger :: forall e. KnownError e => S.Swagger -> S.Swagger
 addToSwagger =
