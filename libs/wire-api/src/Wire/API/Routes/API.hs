@@ -28,6 +28,7 @@ import Polysemy.Internal.Union
 import Servant hiding (Union)
 import Servant.Swagger
 import Unsafe.Coerce
+import Wire.API.Error
 
 -- | A Servant handler bundled with its Swagger documentation.
 --
@@ -44,12 +45,35 @@ data API api = API
 toAPI ::
   forall api r.
   ( ServerEffects r,
+    ErrorSwagger r,
     HasSwagger api,
     HasServer api '[Domain]
   ) =>
   ServerT api (Sem r) ->
   API api
-toAPI h = API (hoistServerWithDomain @api (toHandler @r) h) (toSwagger (Proxy @api))
+toAPI h =
+  API
+    (hoistServerWithDomain @api (toHandler @r) h)
+    (errorSwagger @r (toSwagger (Proxy @api)))
+
+-- | Combine APIs.
+(<@>) :: API api1 -> API api2 -> API (api1 :<|> api2)
+(<@>) (API h1 s1) (API h2 s2) =
+  API
+    (h1 :<|> h2)
+    (s1 <> s2)
+
+class ErrorSwagger (r :: EffectRow) where
+  errorSwagger :: Swagger -> Swagger
+
+instance ErrorSwagger '[] where
+  errorSwagger = id
+
+instance {-# OVERLAPPABLE #-} ErrorSwagger r => ErrorSwagger (eff ': r) where
+  errorSwagger = errorSwagger @r
+
+instance (ErrorSwagger r, KnownError (MapError e)) => ErrorSwagger (ErrorS e ': r) where
+  errorSwagger = addToSwagger @(MapError e) . errorSwagger @r
 
 -- Servant needs a context type argument here that contains *at least* the
 -- context types required by all the HasServer instances. In reality, this should
