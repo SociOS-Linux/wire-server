@@ -1171,21 +1171,21 @@ unqualifyEndpoint loc f ignoreMissing reportMissing message = do
   unqualify (tDomain loc) <$> f qualifiedMessage
 
 postBotMessageUnqualified ::
-  Members
-    '[ BrigAccess,
-       ClientStore,
-       ConversationStore,
-       ExternalAccess,
-       FederatorAccess,
-       GundeckAccess,
-       Input (Local ()),
-       Input Opts,
-       Input UTCTime,
-       MemberStore,
-       TeamStore,
-       TinyLog
-     ]
-    r =>
+  ( r
+      ~ '[ BrigAccess,
+           ClientStore,
+           ConversationStore,
+           ExternalAccess,
+           FederatorAccess,
+           GundeckAccess,
+           Input (Local ()),
+           Input Opts,
+           Input UTCTime,
+           MemberStore,
+           TeamStore,
+           TinyLog
+         ]
+  ) =>
   BotId ->
   ConvId ->
   Maybe IgnoreMissing ->

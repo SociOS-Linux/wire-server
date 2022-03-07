@@ -15,7 +15,13 @@
 -- You should have received a copy of the GNU Affero General Public License along
 -- with this program. If not, see <https://www.gnu.org/licenses/>.
 
-module Wire.API.Routes.API where
+module Wire.API.Routes.API
+  ( API (..),
+    toAPI,
+    namedAPI,
+    (<@>),
+  )
+where
 
 import Data.Domain
 import Data.Proxy
@@ -29,6 +35,7 @@ import Servant hiding (Union)
 import Servant.Swagger
 import Unsafe.Coerce
 import Wire.API.Error
+import Wire.API.Routes.Named
 
 -- | A Servant handler bundled with its Swagger documentation.
 --
@@ -55,6 +62,19 @@ toAPI h =
   API
     (hoistServerWithDomain @api (toHandler @r) h)
     (errorSwagger @r (toSwagger (Proxy @api)))
+
+namedAPI ::
+  forall name api r.
+  ( ServerEffects r,
+    ErrorSwagger r,
+    HasSwagger api,
+    HasServer api '[Domain]
+  ) =>
+  ServerT api (Sem r) ->
+  API (Named name api)
+namedAPI h =
+  let api = toAPI @api @r h
+   in api {apiHandler = Named (apiHandler api)}
 
 -- | Combine APIs.
 (<@>) :: API api1 -> API api2 -> API (api1 :<|> api2)
@@ -132,3 +152,6 @@ instance (ServerEffects r, ServerEffect eff) => ServerEffects (eff ': r) where
 -- | Interpret all effects to 'Handler'.
 toHandler :: forall r a. ServerEffects r => Sem r a -> Handler a
 toHandler = runM . interpretServerEffects @r @'[Embed Handler] . shift @r @'[Embed Handler]
+
+--------------------------------------------------------------------------------
+-- Instances

@@ -107,7 +107,7 @@ mkApp o = do
                 :. customFormatters
                 :. Servant.EmptyContext
             )
-            ( hoistServer' @GalleyAPI.ServantAPI (toServantHandler e) API.servantSitemap
+            ( hoistServer' @GalleyAPI.BotAPI (toServantHandler e) API.servantSitemap
                 :<|> hoistServer' @InternalAPI (toServantHandler e) internalAPI
                 :<|> hoistServer' @FederationAPI (toServantHandler e) federationSitemap
                 :<|> Servant.Tagged (app e)
@@ -153,7 +153,7 @@ bodyParserErrorFormatter' _ _ errMsg =
     }
 
 type CombinedAPI =
-  GalleyAPI.ServantAPI
+  GalleyAPI.BotAPI
     :<|> InternalAPI
     :<|> FederationAPI
     :<|> Servant.Raw
