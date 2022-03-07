@@ -57,6 +57,7 @@ library
       Wire.API.Push.Token
       Wire.API.Push.V2.Token
       Wire.API.RawJson
+      Wire.API.Routes.API
       Wire.API.Routes.AssetBody
       Wire.API.Routes.Internal.Brig
       Wire.API.Routes.Internal.Brig.Connection
@@ -206,6 +207,7 @@ library
     , mime >=0.4
     , mtl
     , pem >=0.2
+    , polysemy
     , proto-lens
     , protobuf >=0.2
     , quickcheck-instances >=0.3.16
